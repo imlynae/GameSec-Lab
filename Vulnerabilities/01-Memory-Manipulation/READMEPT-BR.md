@@ -53,7 +53,7 @@ Spoiler: nessa versão, absolutamente nada.
 
 # Parte 1 — Cheat Engine
 
-Antes de inventar moda e desenvolver minha própria ferramenta, eu queria primeiro provar que a vulnerabilidade realmente existia.
+Antes de inventar (tanta) moda e desenvolver minha própria ferramenta, eu queria primeiro provar que a vulnerabilidade realmente existia.
 
 Então comecei pelo Cheat Engine.
 
@@ -99,7 +99,7 @@ Funcionou.
 
 Primeira conclusão do laboratório:
 
-> confiar em um inteiro armazenado no cliente talvez não seja exatamente uma fortaleza inexpugnável.
+> confiar em um inteiro armazenado no cliente talvez não seja exatamente uma boa ideia.
 
 ---
 
@@ -162,7 +162,7 @@ E aí eu oficialmente parei de depender do Cheat Engine para reproduzir o ataque
 
 ## O que o scanner faz por baixo dos panos
 
-Sem magia negra, prometo.
+Sem magia, prometo.
 
 Ele:
 
@@ -181,7 +181,7 @@ Basicamente, eu comecei esse laboratório pensando:
 
 e terminei implementando leitura e escrita de memória de processos no Windows.
 
-Foi escalando rápido.
+Escalou meio rápido, né?
 
 ---
 
@@ -246,9 +246,7 @@ Essa foi provavelmente a principal conclusão desse primeiro laboratório:
 
 Nesse protótipo offline?
 
-Nada muito dramático. No máximo eu fico absurdamente rica no meu próprio jogo.
-
-Mas o mesmo princípio aplicado a sistemas maiores pode afetar:
+Nada muito dramático. No máximo eu fico absurdamente rica no meu próprio jogo, mas o mesmo princípio aplicado a sistemas maiores pode afetar:
 
 - moeda;
 - XP;
@@ -261,7 +259,7 @@ Mas o mesmo princípio aplicado a sistemas maiores pode afetar:
 
 Em especial, o problema fica muito mais relevante quando um servidor aceita valores enviados pelo cliente como verdade.
 
-E sim, isso já virou ideia para outro lab.
+E sim, isso já virou ideia para outro lab!!!!!
 
 ---
 
@@ -291,7 +289,7 @@ Result: SUCCESS
 Confirmed value: 999
 ```
 
-Porque se eu vou quebrar meu próprio jogo, pelo menos vou deixar provas organizadas.
+Porque eu sou do time das provas organizadas.
 
 ---
 
@@ -329,6 +327,4 @@ Este projeto existe exclusivamente para estudo e pesquisa em Game Security.
 
 Todos os experimentos foram realizados contra software que eu mesma desenvolvi especificamente para ser testado e quebrado.
 
-Nenhum cubo foi permanentemente prejudicado durante os testes.
-
-Talvez.
+Nenhum cubo foi permanentemente prejudicado durante os testes. (Talvez)
