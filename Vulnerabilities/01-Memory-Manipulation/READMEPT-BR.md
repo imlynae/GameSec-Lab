@@ -1,247 +1,200 @@
-﻿# Lab 01 — Manipulação de Memória no Cliente
+﻿# Lab 01 — Client-Side Memory Manipulation
 
-[🇺🇸 English](./README.md) | 🇧🇷 Português
+🇺🇸 English | [🇧🇷 Português](./README.pt-BR.md)
 
-## Visão Geral
+## So... I broke my own game
 
-Este laboratório demonstra como estados sensíveis de um jogo, quando armazenados inteiramente na memória do cliente, podem ser identificados e modificados durante a execução.
+A ideia desse laboratório era simples: eu queria descobrir o quão fácil seria manipular um valor importante do meu próprio jogo Unity sem tocar no código-fonte, e nessa experiência, alvo foi o Gold do jogador.
 
-O alvo utilizado é o **GameSec**, um jogo Unity deliberadamente vulnerável desenvolvido como parte deste repositório para o estudo de conceitos de segurança em jogos dentro de um ambiente controlado.
-
-O experimento foi realizado em duas etapas:
-
-1. **Validação manual utilizando Cheat Engine**
-2. **Reprodução programática utilizando um memory scanner próprio desenvolvido em Python**
-
-A primeira etapa teve como objetivo identificar e validar a vulnerabilidade. Após compreender seu funcionamento, uma ferramenta própria foi desenvolvida para reproduzir a mesma manipulação de memória sem depender do Cheat Engine.
-
-> **Escopo:** Todos os testes documentados neste laboratório foram realizados exclusivamente contra o `GameSec.exe`, uma aplicação intencionalmente vulnerável desenvolvida especificamente para este projeto.
-
----
-
-## Vulnerabilidade
-
-A quantidade de Gold do jogador é armazenada como um inteiro simples na memória do cliente:
-
-```csharp
-public int gold = 100;
-```
-
-O jogo utiliza esse valor presente no cliente como fonte autoritativa para determinar a quantidade atual de Gold do jogador.
-
-Como consequência, um processo com permissão para acessar a memória do jogo pode modificar esse valor sem utilizar as mecânicas previstas pelo sistema.
-
----
-
-## Comportamento Esperado
-
-O jogador inicia com:
+Começamos com:
 
 ```text
 Gold: 100
 XP: 0
 ```
 
-Derrotar um inimigo de maneira legítima concede:
-
-```text
-+25 Gold
-+20 XP
-```
-
-Portanto, após derrotar dois inimigos, o estado esperado é:
+Dois inimigos depois:
 
 ```text
 Gold: 150
 XP: 40
 ```
 
+E alguns minutos brincando com memória depois:
+
+```text
+Gold: 999
+XP: 40
+```
+
+Ou seja: O int estipulado para o gold foi quebrado.
+
+> Tudo aqui foi testado exclusivamente no `GameSec.exe`, um jogo propositalmente vulnerável que eu mesma desenvolvi para estudar Game Security.
+
 ---
 
-# Metodologia
+## O problema
 
-## Etapa 1 — Validação Manual com Cheat Engine
+No primeiro protótipo, o Gold era armazenado assim:
 
-O primeiro objetivo foi determinar se o valor de Gold poderia ser identificado e modificado diretamente na memória.
+```csharp
+public int gold = 100;
+```
 
-Com o jogador inicialmente possuindo:
+Sim. Só.
+
+O jogo confiava completamente nesse valor dentro da memória do cliente, então a pergunta virou:
+
+> se o jogador controla a máquina, o que impede ele de controlar esse `100` também?
+
+Spoiler: nessa versão, absolutamente nada.
+
+---
+
+# Parte 1 — Cheat Engine
+
+Antes de inventar moda e desenvolver minha própria ferramenta, eu queria primeiro provar que a vulnerabilidade realmente existia.
+
+Então comecei pelo Cheat Engine.
+
+Com:
 
 ```text
 Gold: 100
 ```
 
-o Cheat Engine foi conectado ao processo `GameSec.exe`.
-
-Foi realizada uma busca do tipo **Exact Value** utilizando:
+fiz um scan por:
 
 ```text
-Value: 100
-Value Type: 4 Bytes
+Exact Value
+4 Bytes
+100
 ```
 
-A primeira busca retornou múltiplos endereços, pois o inteiro `100` estava presente na memória por diferentes motivos não necessariamente relacionados ao Gold.
+Naturalmente, apareceram vários resultados porque, infelizmente, meu computador não sabe que **aquele 100 específico é meu dinheirinho suado**.
 
-### Filtragem dos Candidatos
-
-Um inimigo foi derrotado normalmente:
+Matei um inimigo:
 
 ```text
-Gold: 100 → 125
+100 → 125
 ```
 
-Em seguida, foi realizado um `Next Scan` procurando pelo novo valor:
+e fiz um `Next Scan`.
 
-```text
-125
-```
+A lista caiu bastante.
 
-Apenas os endereços que anteriormente continham `100` e passaram a conter `125` permaneceram como candidatos.
-
-Isso reduziu significativamente a quantidade de possíveis endereços.
-
-### Modificação Manual da Memória
-
-Um dos candidatos restantes foi adicionado à lista de endereços do Cheat Engine e alterado manualmente:
+Depois alterei um dos candidatos:
 
 ```text
 125 → 999
 ```
 
-O jogo imediatamente passou a apresentar:
+Voltei para o jogo e...
 
 ```text
 Gold: 999
 ```
 
-Isso confirmou que a moeda do jogador poderia ser manipulada diretamente na memória do processo.
+Funcionou.
 
-A vulnerabilidade foi, portanto, **validada manualmente**.
+Primeira conclusão do laboratório:
 
----
-
-## Etapa 2 — Reprodução Programática
-
-Após validar a vulnerabilidade com o Cheat Engine, o próximo objetivo foi reproduzir a mesma técnica sem depender de um editor de memória existente.
-
-Para isso, foi desenvolvido um memory scanner próprio em Python utilizando APIs de processos e memória do Windows.
-
-A ferramenta implementa três operações principais:
-
-```text
-first <valor>
-next <valor>
-write <valor>
-```
+> confiar em um inteiro armazenado no cliente talvez não seja exatamente uma fortaleza inexpugnável.
 
 ---
 
-### First Scan
+# Parte 2 — "Tá, mas eu consigo fazer isso sem Cheat Engine?"
 
-O jogo foi reiniciado com:
+Essa foi a parte que deixou o laboratório bem mais divertido.
+
+Depois de validar o problema com uma ferramenta pronta, decidi reproduzir o processo em Python.
+
+Nasceu então:
 
 ```text
-Gold: 100
+Tools/
+└── MemoryScanner/
+    └── scanner.py
 ```
 
-O scanner foi executado:
+Meu scanner implementa três comandos:
 
-```bash
+```text
+first
+next
+write
+```
+
+O fluxo ficou assim:
+
+```text
+Gold = 100
+   ↓
 python scanner.py first 100
-```
+   ↓
+vários candidatos
 
-A ferramenta:
+mata inimigo
 
-1. localiza o processo `GameSec.exe`;
-2. identifica seu PID;
-3. abre o processo;
-4. enumera suas regiões legíveis de memória;
-5. procura pela representação do inteiro de 32 bits `100`;
-6. armazena os endereços correspondentes como candidatos.
-
-A primeira varredura retorna múltiplos candidatos porque o scanner não sabe o significado daquele valor.
-
-Ele sabe apenas que determinada posição da memória contém o inteiro procurado.
-
----
-
-### Next Scan
-
-Um inimigo foi derrotado normalmente:
-
-```text
-Gold: 100 → 125
-```
-
-Os candidatos anteriores foram então filtrados:
-
-```bash
+Gold = 125
+   ↓
 python scanner.py next 125
-```
+   ↓
+menos candidatos
 
-Em vez de percorrer toda a memória novamente, a ferramenta verifica somente os endereços identificados anteriormente.
+mata outro inimigo
 
-Qualquer endereço que não contenha `125` é descartado.
-
-Um segundo inimigo foi derrotado:
-
-```text
-Gold: 125 → 150
-```
-
-e uma nova filtragem foi realizada:
-
-```bash
+Gold = 150
+   ↓
 python scanner.py next 150
+   ↓
+1 candidato
+
+python scanner.py write 999
+   ↓
+
+Gold = 999
 ```
 
-Durante o experimento documentado, esse processo reduziu os resultados até restar:
-
-```text
-Candidates remaining: 1
-```
-
-O endereço de memória associado ao Gold havia sido isolado com sucesso.
+E aí eu oficialmente parei de depender do Cheat Engine para reproduzir o ataque.
 
 ---
 
-### Memory Write
+## O que o scanner faz por baixo dos panos
 
-Com apenas um candidato restante, o scanner recebeu a instrução de escrever um novo valor:
+Sem magia negra, prometo.
 
-```bash
-python scanner.py write 999
-```
+Ele:
 
-A ferramenta leu o valor existente, realizou a escrita na memória e verificou o resultado.
+- encontra o processo `GameSec.exe`;
+- pega o PID;
+- abre o processo;
+- percorre regiões de memória legíveis;
+- procura inteiros de 32 bits;
+- salva os endereços candidatos;
+- filtra esses endereços conforme o valor muda;
+- escreve um novo valor quando sobra um único candidato.
 
-O jogo imediatamente passou a apresentar:
+Basicamente, eu comecei esse laboratório pensando:
 
-```text
-Gold: 999
-XP: 40
-```
+> "quero hackear meu joguinho"
 
-A vulnerabilidade originalmente identificada através do Cheat Engine havia, portanto, sido **reproduzida com sucesso através de uma ferramenta própria**.
+e terminei implementando leitura e escrita de memória de processos no Windows.
+
+Foi escalando rápido.
 
 ---
 
 # Resultado
 
-A vulnerabilidade foi explorada com sucesso através de **duas abordagens**:
-
-| Método | Resultado |
-|---|---|
-| Cheat Engine | Sucesso |
-| Memory Scanner próprio em Python | Sucesso |
-
-O estado legítimo após derrotar dois inimigos era:
+Depois de dois inimigos, o estado legítimo era:
 
 ```text
 Gold: 150
 XP: 40
 ```
 
-Após a manipulação da memória:
+Após a manipulação:
 
 ```text
 Gold: 999
@@ -251,162 +204,70 @@ XP: 40
 | Estado | Gold | XP |
 |---|---:|---:|
 | Inicial | 100 | 0 |
-| Após Inimigo #1 | 125 | 20 |
-| Após Inimigo #2 | 150 | 40 |
-| Após manipulação da memória | **999** | 40 |
+| Inimigo #1 | 125 | 20 |
+| Inimigo #2 | 150 | 40 |
+| Após manipulação | **999** | 40 |
 
-O XP permanecer em `40` fornece evidência adicional de que o Gold adicional não foi obtido através do fluxo normal de recompensa dos inimigos.
-
----
-
-## Prova de Conceito
-
-![Manipulação de memória realizada com sucesso](./screenshots/gold-999.png)
+O XP continuar em `40` é uma evidência útil: eu não ganhei Gold através do fluxo normal de recompensa. Só fui diretamente na memória e falei "agora é 999".
 
 ---
 
-# Fluxo Técnico
+## Proof of Concept
+
+![Gold alterado em memória](./screenshots/gold-999.png)
+
+---
+
+# Causa raiz
+
+O problema não é simplesmente o fato de `gold` ser um `int`.
+
+A causa real é **confiança no cliente**.
+
+O cliente:
 
 ```text
-                GameSec.exe
-                    │
-                    │
-              Gold = 100
-                    │
-                    ▼
-          ┌─────────────────┐
-          │   First Scan    │
-          │    int32 100    │
-          └────────┬────────┘
-                   │
-           vários candidatos
-                   │
-                   ▼
-            Inimigo derrotado
-              Gold = 125
-                   │
-                   ▼
-          ┌─────────────────┐
-          │    Next Scan    │
-          │    int32 125    │
-          └────────┬────────┘
-                   │
-           menos candidatos
-                   │
-                   ▼
-            Inimigo derrotado
-              Gold = 150
-                   │
-                   ▼
-          ┌─────────────────┐
-          │    Next Scan    │
-          │    int32 150    │
-          └────────┬────────┘
-                   │
-                   ▼
-            resta 1 candidato
-                   │
-                   ▼
-          ┌─────────────────┐
-          │  Memory Write   │
-          │    150 → 999    │
-          └────────┬────────┘
-                   │
-                   ▼
-               GameSec.exe
-
-               Gold = 999
-                 XP = 40
+armazena o Gold
+      +
+decide qual é o Gold
+      +
+usa esse Gold como verdade
 ```
+
+Se o usuário controla o cliente, ele também tem possibilidade de interferir nesse estado.
+
+Essa foi provavelmente a principal conclusão desse primeiro laboratório:
+
+> dificultar a alteração de um valor não é a mesma coisa que tornar esse valor confiável.
 
 ---
 
-# Causa Raiz
+# Impacto
 
-A vulnerabilidade existe porque um valor relevante para a lógica do jogo é:
+Nesse protótipo offline?
 
-- armazenado diretamente na memória do cliente;
-- representado através de um tipo primitivo previsível;
-- modificável durante a execução;
-- considerado pelo jogo como estado autoritativo.
+Nada muito dramático. No máximo eu fico absurdamente rica no meu próprio jogo.
 
-Em outras palavras, o cliente controla tanto o armazenamento quanto a interpretação do valor utilizado como moeda.
+Mas o mesmo princípio aplicado a sistemas maiores pode afetar:
 
-O experimento demonstra um princípio importante de segurança em jogos:
+- moeda;
+- XP;
+- vida;
+- munição;
+- inventário;
+- progressão;
+- pontuações;
+- economias compartilhadas.
 
-> **Um cliente sob controle do jogador não deve ser considerado uma autoridade confiável para estados sensíveis do jogo.**
+Em especial, o problema fica muito mais relevante quando um servidor aceita valores enviados pelo cliente como verdade.
 
----
-
-# Memory Scanner Próprio
-
-A segunda etapa da prova de conceito utiliza uma ferramenta própria desenvolvida em Python especificamente para este laboratório.
-
-```text
-Tools/
-└── MemoryScanner/
-    ├── scanner.py
-    └── logs/
-```
-
-O scanner demonstra conceitos como:
-
-- descoberta de processos no Windows;
-- identificação do PID;
-- obtenção de handles de processos;
-- enumeração de regiões de memória virtual;
-- leitura da memória de outro processo;
-- busca por inteiros de 32 bits;
-- filtragem iterativa de endereços candidatos;
-- escrita controlada na memória do processo;
-- geração de logs das sessões de teste.
-
-A implementação foi intencionalmente limitada ao processo:
-
-```text
-GameSec.exe
-```
-
-mantendo a ferramenta dentro do escopo controlado deste laboratório.
+E sim, isso já virou ideia para outro lab.
 
 ---
 
-# Fluxo do Scanner
+# Logs
 
-O scanner reproduz o fluxo básico de busca em memória realizado inicialmente de forma manual:
-
-```text
-Valor conhecido
-      │
-      ▼
-First Scan
-      │
-      ▼
-Endereços candidatos
-      │
-      ▼
-Mudança legítima de estado
-      │
-      ▼
-Next Scan
-      │
-      ▼
-Filtragem de candidatos
-      │
-      ▼
-Identificação do endereço
-      │
-      ▼
-Memory Write
-```
-
-A diferença importante é que o segundo experimento implementa esse comportamento programaticamente, em vez de delegá-lo ao Cheat Engine.
-
----
-
-# Evidências
-
-O scanner gera logs de sessão contendo o fluxo do experimento.
+O scanner também salva logs das sessões.
 
 Exemplo:
 
@@ -430,97 +291,44 @@ Result: SUCCESS
 Confirmed value: 999
 ```
 
-Evidências selecionadas de execuções bem-sucedidas são armazenadas em:
+Porque se eu vou quebrar meu próprio jogo, pelo menos vou deixar provas organizadas.
+
+---
+
+# Próximo passo
+
+Agora vem a parte divertida:
+
+**tentar proteger o Gold.**
+
+Mas não quero simplesmente esconder o valor e declarar vitória.
+
+A próxima etapa será:
 
 ```text
-evidence/
+implementar proteção
+        ↓
+tentar quebrar a proteção
+        ↓
+descobrir que ela provavelmente não era tão boa
+        ↓
+melhorar
+        ↓
+quebrar de novo
 ```
 
-Arquivos utilizados apenas durante a execução, como listas de candidatos e metadados da sessão ativa, não são destinados ao versionamento.
+O objetivo desse projeto não é criar um sistema "impossível de hackear".
+
+É entender **por que as vulnerabilidades existem, como são exploradas e quais defesas realmente mudam o modelo de confiança**.
 
 ---
 
-# Impacto
+## Disclaimer
 
-Fraquezas semelhantes podem permitir a modificação de valores controlados pelo cliente, como:
+Este projeto existe exclusivamente para estudo e pesquisa em Game Security.
 
-- moedas;
-- vida;
-- munição;
-- experiência;
-- quantidade de itens;
-- atributos de personagens;
-- valores relacionados à progressão.
+Todos os experimentos foram realizados contra software que eu mesma desenvolvi especificamente para ser testado e quebrado.
 
-O impacto real de segurança depende diretamente da arquitetura do jogo.
+Nenhum cubo foi permanentemente prejudicado durante os testes.
 
-Em um jogo exclusivamente single-player e offline, modificar a memória local pode representar pouco ou nenhum impacto significativo de segurança.
-
-Por outro lado, em jogos multiplayer, economias compartilhadas, progressão competitiva ou sistemas nos quais o servidor confia em valores fornecidos pelo cliente, as consequências podem ser consideravelmente mais graves.
-
----
-
-# Mitigação
-
-**Status: Ainda não implementada**
-
-A próxima etapa deste laboratório investigará possíveis formas de mitigação e, principalmente, as limitações de cada abordagem.
-
-Os próximos experimentos incluem:
-
-- verificações de integridade no cliente;
-- ofuscação de valores;
-- detecção de adulterações;
-- arquitetura com estado autoritativo;
-- tentativas de contornar as proteções implementadas.
-
-O objetivo não é simplesmente tornar o valor mais difícil de encontrar.
-
-O experimento pretende explorar a diferença entre:
-
-```text
-Ofuscação
-    ≠
-Confiança
-```
-
-Tornar um valor presente no cliente mais difícil de modificar não transforma o cliente em uma fonte autoritativa confiável.
-
----
-
-# Aprendizados
-
-O experimento demonstrou todo o processo desde a descoberta da vulnerabilidade até sua reprodução independente.
-
-```text
-Ferramenta existente
-        │
-        ▼
-Observar comportamento
-        │
-        ▼
-Validar vulnerabilidade
-        │
-        ▼
-Compreender a técnica
-        │
-        ▼
-Implementar ferramenta própria
-        │
-        ▼
-Reproduzir o ataque
-```
-
-O Cheat Engine foi útil para compreender manualmente como o valor se comportava na memória.
-
-O desenvolvimento do scanner próprio exigiu então reproduzir programaticamente os conceitos envolvidos, incluindo enumeração da memória, leitura de memória de processos, filtragem de candidatos e escrita em memória.
-
-Mais importante, o experimento demonstra que esconder um valor atrás das mecânicas normais do jogo não o protege quando o estado autoritativo permanece sob controle do cliente.
-
----
-
-# Aviso
-
-Este projeto foi desenvolvido exclusivamente para fins educacionais e pesquisa em segurança de jogos.
-
-Todos os experimentos documentados neste repositório foram realizados contra software desenvolvido intencionalmente e controlado para este laboratório.
+Talvez.
